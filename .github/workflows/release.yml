@@ -6,7 +6,7 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+'
 
 env:
-  BINARY_NAME: rustmailer-server
+  BINARY_NAME: rustmailer
 
 jobs:
   build:
@@ -18,19 +18,15 @@ jobs:
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact_name: linux-x86_64
-            archive_format: tar.gz
           - os: ubuntu-latest
             target: x86_64-unknown-linux-musl
             artifact_name: linux-x86_64-musl
-            archive_format: tar.gz
           - os: macos-latest
             target: x86_64-apple-darwin
             artifact_name: macos-x86_64
-            archive_format: tar.gz
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             artifact_name: windows-x86_64
-            archive_format: zip
             binary_ext: .exe
     
     steps:
@@ -60,21 +56,17 @@ jobs:
         run: |
           strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_ext || '' }}
 
-      - name: Create release archive
+      - name: Create zip archive
         run: |
           mkdir -p release
           BINARY=target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_ext || '' }}
-          if [ "${{ matrix.archive_format }}" = "tar.gz" ]; then
-            tar czf release/${{ matrix.artifact_name }}.${{ matrix.archive_format }} $BINARY
-          elif [ "${{ matrix.archive_format }}" = "zip" ]; then
-            zip -j release/${{ matrix.artifact_name }}.${{ matrix.archive_format }} $BINARY
-          fi
+          zip -j release/${{ matrix.artifact_name }}.zip "$BINARY"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact_name }}
-          path: release/${{ matrix.artifact_name }}.${{ matrix.archive_format }}
+          path: release/${{ matrix.artifact_name }}.zip
 
   release:
     name: Create Release
@@ -93,9 +85,9 @@ jobs:
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           files: |
-            artifacts/linux-x86_64.tar.gz
-            artifacts/linux-x86_64-musl.tar.gz
-            artifacts/macos-x86_64.tar.gz
+            artifacts/linux-x86_64.zip
+            artifacts/linux-x86_64-musl.zip
+            artifacts/macos-x86_64.zip
             artifacts/windows-x86_64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
