@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  build:
+    name: Build Release
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: linux-x86_64
+            archive_format: tar.gz
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            artifact_name: linux-x86_64-musl
+            archive_format: tar.gz
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: macos-x86_64
+            archive_format: tar.gz
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: windows-x86_64
+            archive_format: zip
+            binary_ext: .exe
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          target: ${{ matrix.target }}
+          override: true
+
+      - name: Install musl-tools (Linux musl only)
+        if: matrix.target == 'x86_64-unknown-linux-musl'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Build release binary
+        uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --target ${{ matrix.target }}
+
+      - name: Strip binary (Linux and macOS)
+        if: matrix.os != 'windows-latest'
+        run: |
+          strip target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_ext || '' }}
+
+      - name: Create release archive
+        run: |
+          mkdir -p release
+          BINARY=target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}${{ matrix.binary_ext || '' }}
+          if [ "${{ matrix.archive_format }}" = "tar.gz" ]; then
+            tar czf release/${{ matrix.artifact_name }}.${{ matrix.archive_format }} $BINARY
+          elif [ "${{ matrix.archive_format }}" = "zip" ]; then
+            zip -j release/${{ matrix.artifact_name }}.${{ matrix.archive_format }} $BINARY
+          fi
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: release/${{ matrix.artifact_name }}.${{ matrix.archive_format }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            artifacts/linux-x86_64.tar.gz
+            artifacts/linux-x86_64-musl.tar.gz
+            artifacts/macos-x86_64.tar.gz
+            artifacts/windows-x86_64.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
